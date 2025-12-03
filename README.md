@@ -25,20 +25,6 @@ git clone https://github.com/yourusername/laravel-library-api-ahmedashraf.git
 cd laravel-library-api-ahmedashraf
 ```
 
-2. Install dependencies:
-```bash
-composer install
-```
-
-3. Copy the environment file:
-```bash
-cp .env.example .env
-```
-
-4. Generate application key:
-```bash
-php artisan key:generate
-```
 
 5. Configure your database in `.env`:
 ```env
