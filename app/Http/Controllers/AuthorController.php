@@ -6,22 +6,25 @@ use App\Http\Requests\StoreAuthorRequest;
 use App\Http\Requests\UpdateAuthorRequest;
 use App\Http\Resources\AuthorResource;
 use App\Models\Author;
+use App\Services\AuthorService;
+use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Log;
 
 class AuthorController extends Controller
 {
+    public function __construct(private AuthorService $authors)
+    {
+    }
+
     /**
      * Display a listing of the resource.
      */
     public function index(): JsonResponse|AnonymousResourceCollection
     {
         try {
-            $authors = Author::query()
-                ->paginate(15);
-
-            return AuthorResource::collection($authors);
+            return AuthorResource::collection($this->authors->list());
         } catch (\Throwable $e) {
             Log::error('Failed to list authors', ['error' => $e->getMessage()]);
 
@@ -37,7 +40,7 @@ class AuthorController extends Controller
     public function store(StoreAuthorRequest $request): JsonResponse|AuthorResource
     {
         try {
-            $author = Author::create($request->validated());
+            $author = $this->authors->create($request->validated());
 
             return new AuthorResource($author);
         } catch (\Throwable $e) {
@@ -71,9 +74,9 @@ class AuthorController extends Controller
     public function update(UpdateAuthorRequest $request, Author $author): JsonResponse|AuthorResource
     {
         try {
-            $author->update($request->validated());
+            $updatedAuthor = $this->authors->update($author, $request->validated());
 
-            return new AuthorResource($author);
+            return new AuthorResource($updatedAuthor);
         } catch (\Throwable $e) {
             Log::error('Failed to update author', ['error' => $e->getMessage()]);
 
@@ -89,15 +92,13 @@ class AuthorController extends Controller
     public function destroy(Author $author): JsonResponse
     {
         try {
-            if ($author->books()->exists()) {
-                return response()->json([
-                    'message' => 'Cannot delete author with existing books.',
-                ], 422);
-            }
-
-            $author->delete();
+            $this->authors->delete($author);
 
             return response()->json(['message' => 'Author deleted successfully'], 200);
+        } catch (DomainException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
         } catch (\Throwable $e) {
             Log::error('Failed to delete author', ['error' => $e->getMessage()]);
 

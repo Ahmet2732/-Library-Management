@@ -6,23 +6,24 @@ use App\Http\Requests\StoreBookRequest;
 use App\Http\Requests\UpdateBookRequest;
 use App\Http\Resources\BookResource;
 use App\Models\Book;
+use App\Services\BookService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Log;
 
 class BookController extends Controller
 {
+    public function __construct(private BookService $books)
+    {
+    }
+
     /**
      * Display a listing of the resource.
      */
     public function index(): JsonResponse|AnonymousResourceCollection
     {
         try {
-            $books = Book::query()
-                ->with('author')
-                ->paginate(15);
-
-            return BookResource::collection($books);
+            return BookResource::collection($this->books->list());
         } catch (\Throwable $e) {
             Log::error('Failed to list books', ['error' => $e->getMessage()]);
 
@@ -38,9 +39,7 @@ class BookController extends Controller
     public function store(StoreBookRequest $request): JsonResponse|BookResource
     {
         try {
-            $book = Book::create($request->validated());
-
-            $book->load('author');
+            $book = $this->books->create($request->validated());
 
             return new BookResource($book);
         } catch (\Throwable $e) {
@@ -58,9 +57,7 @@ class BookController extends Controller
     public function show(Book $book): JsonResponse|BookResource
     {
         try {
-            $book->load('author');
-
-            return new BookResource($book);
+            return new BookResource($this->books->show($book));
         } catch (\Throwable $e) {
             Log::error('Failed to fetch book', ['error' => $e->getMessage()]);
 
@@ -76,11 +73,9 @@ class BookController extends Controller
     public function update(UpdateBookRequest $request, Book $book): JsonResponse|BookResource
     {
         try {
-            $book->update($request->validated());
+            $updatedBook = $this->books->update($book, $request->validated());
 
-            $book->load('author');
-
-            return new BookResource($book);
+            return new BookResource($updatedBook);
         } catch (\Throwable $e) {
             Log::error('Failed to update book', ['error' => $e->getMessage()]);
 
@@ -96,7 +91,7 @@ class BookController extends Controller
     public function destroy(Book $book): JsonResponse
     {
         try {
-            $book->delete();
+            $this->books->delete($book);
 
             return response()->json(['message' => 'Book deleted successfully'], 200);
         } catch (\Throwable $e) {

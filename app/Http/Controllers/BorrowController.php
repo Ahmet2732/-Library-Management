@@ -4,37 +4,31 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\BorrowBookRequest;
 use App\Http\Resources\BorrowRecordResource;
-use App\Models\Book;
-use App\Models\BorrowRecord;
+use App\Services\BorrowService;
+use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Log;
 
 class BorrowController extends Controller
 {
+    public function __construct(private BorrowService $borrows)
+    {
+    }
+
     /**
      * Borrow a book.
      */
     public function borrow(BorrowBookRequest $request): JsonResponse|BorrowRecordResource
     {
         try {
-            $book = Book::findOrFail($request->validated()['book_id']);
-
-            if ($book->isBorrowed()) {
-                return response()->json([
-                    'message' => 'This book is currently borrowed and cannot be borrowed again until returned.',
-                ], 422);
-            }
-
-            $borrowRecord = BorrowRecord::create([
-                'user_name' => $request->validated()['user_name'],
-                'book_id' => $book->id,
-                'borrow_at' => now(),
-            ]);
-
-            $borrowRecord->load('book');
+            $borrowRecord = $this->borrows->borrow($request->validated());
 
             return new BorrowRecordResource($borrowRecord);
+        } catch (DomainException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
         } catch (\Throwable $e) {
             Log::error('Failed to borrow book', ['error' => $e->getMessage()]);
 
@@ -50,21 +44,13 @@ class BorrowController extends Controller
     public function return(int $borrow_id): JsonResponse|BorrowRecordResource
     {
         try {
-            $borrowRecord = BorrowRecord::findOrFail($borrow_id);
-
-            if ($borrowRecord->return_at !== null) {
-                return response()->json([
-                    'message' => 'This book has already been returned.',
-                ], 422);
-            }
-
-            $borrowRecord->update([
-                'return_at' => now(),
-            ]);
-
-            $borrowRecord->load('book');
+            $borrowRecord = $this->borrows->return($borrow_id);
 
             return new BorrowRecordResource($borrowRecord);
+        } catch (DomainException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
         } catch (\Throwable $e) {
             Log::error('Failed to return book', ['error' => $e->getMessage()]);
 
@@ -80,12 +66,7 @@ class BorrowController extends Controller
     public function history(): JsonResponse|AnonymousResourceCollection
     {
         try {
-            $borrowRecords = BorrowRecord::query()
-                ->with('book.author')
-                ->orderBy('created_at', 'desc')
-                ->paginate(15);
-
-            return BorrowRecordResource::collection($borrowRecords);
+            return BorrowRecordResource::collection($this->borrows->history());
         } catch (\Throwable $e) {
             Log::error('Failed to fetch borrow history', ['error' => $e->getMessage()]);
 
